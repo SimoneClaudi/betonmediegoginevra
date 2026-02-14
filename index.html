@@ -1,0 +1,563 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>BetOnMeDiegoGinevra</title>
+
+<link rel="icon" href='data:image/svg+xml,
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
+<text y=".9em" font-size="90">🎰🍼</text>
+</svg>'>
+
+<style>
+*{box-sizing:border-box;margin:0;padding:0;}
+body{
+  display:flex;
+  font-family:'Segoe UI',Arial;
+  background:linear-gradient(135deg,#e3f2ff,#ffe6f2);
+  min-height:100vh;
+}
+.left{width:70%;padding:30px;overflow-y:auto;}
+.right{width:30%;padding:20px;}
+.sticky{
+  position:sticky;
+  top:20px;
+  background:linear-gradient(180deg,#0d1b2a,#1b263b);
+  color:white;
+  padding:25px;
+  border-radius:12px;
+  max-height:95vh;
+  overflow-y:auto;
+}
+
+/* CATEGORY */
+.category{
+  background:white;
+  border-radius:14px;
+  margin-bottom:20px;
+  box-shadow:0 8px 25px rgba(0,0,0,0.08);
+  overflow:hidden;
+}
+.category-header{
+  padding:15px 18px;
+  font-weight:600;
+  background:linear-gradient(90deg,#0077b6,#ff4fa3);
+  color:white;
+  cursor:pointer;
+  position:relative;
+}
+.category-header::after{
+  content:"▾";
+  position:absolute;
+  right:18px;
+  transition:0.3s;
+}
+.category.active .category-header::after{
+  transform:rotate(180deg);
+}
+.category-content{
+  display:none;
+  padding:20px;
+}
+.category.active .category-content{
+  display:block;
+}
+
+/* MARKET */
+.market{
+  margin-bottom:25px;
+  padding-bottom:15px;
+  border-bottom:1px solid #eee;
+}
+.market h3{
+  margin-bottom:10px;
+  font-size:15px;
+  color:#1b263b;
+}
+
+/* OPTION */
+.option{
+  display:inline-flex;
+  justify-content:space-between;
+  align-items:center;
+  min-width:160px;
+  margin:6px;
+  padding:8px 12px;
+  background:#f1f7ff;
+  border-radius:20px;
+  cursor:pointer;
+  border:1px solid #cfe8ff;
+  font-size:14px;
+  user-select:none;
+}
+.option .odd{
+  font-weight:bold;
+  color:#ff4fa3;
+  margin-left:8px;
+}
+.option.selected{
+  background:linear-gradient(90deg,#0077b6,#ff4fa3);
+  color:white;
+}
+.option.selected .odd{
+  color:white;
+}
+
+/* TABLE U/O */
+.ou-table{
+  width:100%;
+  border-collapse:collapse;
+  margin-top:10px;
+  border-radius:10px;
+  overflow:hidden;
+  font-size:13px;
+}
+.ou-table th, .ou-table td{
+  border:3px solid #005080;
+  text-align:center;
+  padding:8px;
+  font-weight:bold;
+}
+.ou-table th{
+  background:linear-gradient(90deg,#99c2ff,#ffb6d9);
+  color:white;
+}
+.ou-table td{
+  background:#f0f4fb;
+  cursor:pointer;
+  transition:0.2s;
+  user-select:none;
+}
+.ou-table td:hover{
+  background:#ffe6f2;
+}
+.ou-cell.selected{
+  background:linear-gradient(90deg,#0077b6,#ff4fa3);
+  color:white;
+}
+
+/* SIDEBAR */
+#betList div{
+  background:#1b263b;
+  padding:8px;
+  border-radius:6px;
+  margin-bottom:6px;
+  font-size:13px;
+  border-left:3px solid #ff4fa3;
+}
+.bet-odd{color:#00d4ff;font-weight:bold;}
+input{
+  width:100%;
+  padding:10px;
+  margin-top:6px;
+  border-radius:6px;
+  border:none;
+}
+button{
+  width:100%;
+  padding:12px;
+  margin-top:12px;
+  border:none;
+  border-radius:8px;
+  font-weight:bold;
+  background:linear-gradient(90deg,#0077b6,#ff4fa3);
+  color:white;
+  cursor:pointer;
+  user-select:none;
+}
+.reset-btn{background:#ff4fa3;}
+#totalOdds{color:#ff4fa3;font-weight:bold;}
+#potentialWin{color:#00d4ff;font-weight:bold;}
+
+@media(max-width:900px){
+  body{flex-direction:column;}
+  .left,.right{width:100%;}
+}
+</style>
+</head>
+
+<body>
+
+<div class="left" id="marketsContainer"></div>
+
+<div class="right">
+<div class="sticky">
+<h2>Schedina</h2>
+<div id="betList"></div>
+<hr style="margin:15px 0;">
+Puntata €
+<input type="number" id="stake" value="10" min="0" step="0.1" onchange="updateTotals()">
+<h3>Quota Totale: <span id="totalOdds">1.00</span></h3>
+<h3>Vincita: € <span id="potentialWin">10.00</span></h3>
+<input type="text" id="username" placeholder="Inserisci il tuo nome e cognome prima di inviare schedina">
+<button onclick="submitBet()">INVIA SCHEDINA</button>
+<button class="reset-btn" onclick="resetSelections()">RESET</button>
+</div>
+</div>
+
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
+<script src="firebase-config.js"></script>
+
+<script>
+
+let selections = {};
+
+// CREA OPZIONE SINGOLA (unica selezione per sottoaccordion)
+function createOption(marketId, marketName, label, quota) {
+  let div = document.createElement("div");
+  div.className = "option";
+  div.innerHTML = `${label}<span class="odd">${quota.toFixed(2)}</span>`;
+
+  div.onclick = () => {
+    if (selections[marketId] && selections[marketId].label === label) {
+      // Deselect current selection
+      delete selections[marketId];
+      div.classList.remove("selected");
+    } else {
+      // Deseleziona solo le opzioni dello stesso marketId
+      document.querySelectorAll(`.option[data-market='${marketId}']`).forEach(el => el.classList.remove("selected"));
+      selections[marketId] = { marketName, label, quota };
+      div.classList.add("selected");
+    }
+    updateBetList();
+  };
+  div.setAttribute("data-market", marketId);
+  return div;
+}
+
+// CREA TABELLA U/O (unica selezione per sottoaccordion)
+function createOUTable(marketId, marketName, lines, odds, unit) {
+  let table = document.createElement("table");
+  table.className = "ou-table";
+
+  let header = "<tr>";
+  lines.forEach(line => {
+    header += `<th colspan='2'>${line} ${unit}</th>`;
+  });
+  header += "</tr><tr>";
+  lines.forEach(() => {
+    header += "<th>Under</th><th>Over</th>";
+  });
+  header += "</tr>";
+  table.innerHTML = header;
+
+  let row = document.createElement("tr");
+
+  lines.forEach((line, i) => {
+    ["Under", "Over"].forEach((type, j) => {
+      let cell = document.createElement("td");
+      cell.className = "ou-cell";
+      cell.innerHTML = odds[i][j].toFixed(2);
+
+      cell.onclick = () => {
+        let label = type + " " + line + " " + unit;
+        if (selections[marketId] && selections[marketId].label === label) {
+          delete selections[marketId];
+          // Deseleziona solo le celle di questo market
+          table.querySelectorAll("td").forEach(c => c.classList.remove("selected"));
+        } else {
+          selections[marketId] = { marketName, label, quota: odds[i][j] };
+          // Deseleziona solo le celle di questo market
+          table.querySelectorAll("td").forEach(c => c.classList.remove("selected"));
+          cell.classList.add("selected");
+        }
+        updateBetList();
+      };
+      row.appendChild(cell);
+    });
+  });
+  table.appendChild(row);
+  return table;
+}
+
+// COSTRUISCE TUTTI I MERCATI COMPLETI
+function buildMarkets() {
+  const container = document.getElementById("marketsContainer");
+
+  // Data di nascita
+  let catData = document.createElement("div");
+  catData.className = "category";
+  catData.innerHTML = "<div class='category-header'>📅 Data di Nascita</div><div class='category-content'></div>";
+  catData.querySelector(".category-header").onclick = () => toggleCategory(catData);
+  container.appendChild(catData);
+  let cData = catData.querySelector(".category-content");
+
+  // Data Esatta
+  let market = document.createElement("div");
+  market.className = "market";
+  market.innerHTML = "<h3>Data Esatta</h3>";
+  [
+    ["< 30 Giugno", 1.80], ["30 Giugno", 1.40], ["1 Luglio", 1.25], ["2 Luglio", 1.15],
+    ["3 Luglio", 1.08], ["4 Luglio", 1.05], ["5 Luglio", 1.15], ["6 Luglio", 1.25],
+    ["7 Luglio", 1.40], ["8 Luglio", 1.60], ["9 Luglio", 1.80], ["10 Luglio", 2.10],
+    ["11 Luglio", 2.40], ["12 Luglio", 2.70], ["13 Luglio", 3.00], ["> 13 Luglio", 3.50]
+  ].forEach(([l, q]) => market.appendChild(createOption("data_esatta", "Data Esatta", l, q)));
+  cData.appendChild(market);
+
+  // Giorno Pari/Dispari
+  let market2 = document.createElement("div");
+  market2.className = "market";
+  market2.innerHTML = "<h3>Giorno Pari/Dispari</h3>";
+  [["Pari", 1.90], ["Dispari", 1.90]].forEach(([l, q]) => market2.appendChild(createOption("giorno_pari_dispari", "Giorno Pari/Dispari", l, q)));
+  cData.appendChild(market2);
+
+  // Over/Under Giorno Tabella
+  let marketOU = document.createElement("div");
+  marketOU.className = "market";
+  marketOU.innerHTML = "<h3>Over/Under Giorno (Luglio)</h3>";
+  let lines = ["2,5", "3,5", "4,5", "5,5", "7,5"];
+  let odds = [
+    [1.60, 1.60],
+    [1.75, 1.45],
+    [1.95, 1.30],
+    [2.40, 1.20],
+    [1.40, 2.20]
+  ];
+  marketOU.appendChild(createOUTable("ou_giorno", "Over/Under Giorno", lines, odds, "Luglio"));
+  cData.appendChild(marketOU);
+
+  // Peso
+  let catPeso = document.createElement("div");
+  catPeso.className = "category";
+  catPeso.innerHTML = "<div class='category-header'>⚖️ Peso</div><div class='category-content'></div>";
+  catPeso.querySelector(".category-header").onclick = () => toggleCategory(catPeso);
+  container.appendChild(catPeso);
+  let cPeso = catPeso.querySelector(".category-content");
+
+  // Peso fasce
+  let marketPeso = document.createElement("div");
+  marketPeso.className = "market";
+  marketPeso.innerHTML = "<h3>Peso (Fasce)</h3>";
+  [
+    ["< 2.5 kg", 3.50], ["2.5–2.8 kg", 2.20], ["2.8–3.0 kg", 1.80], ["3.0–3.2 kg", 1.60],
+    ["3.2–3.4 kg", 1.50], ["3.4–3.6 kg", 1.90], ["3.6–3.8 kg", 2.50], ["> 3.8 kg", 3.80]
+  ].forEach(([l, q]) => marketPeso.appendChild(createOption("peso_fasce", "Peso (Fasce)", l, q)));
+  cPeso.appendChild(marketPeso);
+
+  // Over/Under Peso Tabella
+  let marketOUPeso = document.createElement("div");
+  marketOUPeso.className = "market";
+  marketOUPeso.innerHTML = "<h3>Over/Under Peso (kg)</h3>";
+  let linesPeso = ["2,5", "3,0", "3,2", "3,5"];
+  let oddsPeso = [
+    [3.00, 1.25],
+    [1.90, 1.90],
+    [1.75, 2.00],
+    [1.40, 2.80]
+  ];
+  marketOUPeso.appendChild(createOUTable("ou_peso", "Over/Under Peso", linesPeso, oddsPeso, "kg"));
+  cPeso.appendChild(marketOUPeso);
+
+  // Orario
+  let catOrario = document.createElement("div");
+  catOrario.className = "category";
+  catOrario.innerHTML = "<div class='category-header'>⏰ Orario di Nascita</div><div class='category-content'></div>";
+  catOrario.querySelector(".category-header").onclick = () => toggleCategory(catOrario);
+  container.appendChild(catOrario);
+  let cOrario = catOrario.querySelector(".category-content");
+
+  let marketOrario = document.createElement("div");
+  marketOrario.className = "market";
+  marketOrario.innerHTML = "<h3>Fasce Orarie</h3>";
+  [
+    ["00–03", 3.20], ["03–06", 2.80], ["06–09", 1.90], ["09–12", 1.70],
+    ["12–15", 1.50], ["15–18", 1.65], ["18–21", 2.10], ["21–24", 2.90]
+  ].forEach(([l, q]) => marketOrario.appendChild(createOption("orario_fasce", "Orario", l, q)));
+  cOrario.appendChild(marketOrario);
+
+  // Over/Under Orario Tabella
+  let marketOUOrario = document.createElement("div");
+  marketOUOrario.className = "market";
+  marketOUOrario.innerHTML = "<h3>Over/Under Orario</h3>";
+  let linesOrario = ["11,5", "14,5", "17,5"];
+  let oddsOrario = [
+    [1.75, 1.75],
+    [1.50, 2.20],
+    [1.35, 3.00]
+  ];
+  marketOUOrario.appendChild(createOUTable("ou_orario", "Over/Under Orario", linesOrario, oddsOrario, ""));
+  cOrario.appendChild(marketOUOrario);
+
+  // Sesso
+  let catSesso = document.createElement("div");
+  catSesso.className = "category";
+  catSesso.innerHTML = "<div class='category-header'>👶 Sesso</div><div class='category-content'></div>";
+  catSesso.querySelector(".category-header").onclick = () => toggleCategory(catSesso);
+  container.appendChild(catSesso);
+  let cSesso = catSesso.querySelector(".category-content");
+  [["Maschio", 1.90], ["Femmina", 1.90]].forEach(([l, q]) => cSesso.appendChild(createOption("sesso", "Sesso", l, q)));
+
+  // Colore Capelli
+  let catCapelli = document.createElement("div");
+  catCapelli.className = "category";
+  catCapelli.innerHTML = "<div class='category-header'>🎨 Colore Capelli</div><div class='category-content'></div>";
+  catCapelli.querySelector(".category-header").onclick = () => toggleCategory(catCapelli);
+  container.appendChild(catCapelli);
+  let cCapelli = catCapelli.querySelector(".category-content");
+  let marketCap = document.createElement("div");
+  marketCap.className = "market";
+  marketCap.innerHTML = "<h3>Singoli</h3>";
+  [["Biondi", 2.20], ["Castani", 1.60], ["Neri", 2.40], ["Rossi", 4.20]].forEach(([l, q]) => marketCap.appendChild(createOption("capelli_singoli", "Colore Capelli", l, q)));
+  cCapelli.appendChild(marketCap);
+
+  let marketCap2 = document.createElement("div");
+  marketCap2.className = "market";
+  marketCap2.innerHTML = "<h3>Doppia Chance</h3>";
+  [["Biondi o Castani", 1.30], ["Castani o Neri", 1.25], ["Neri o Rossi", 1.90], ["Biondi o Rossi", 2.00]].forEach(([l, q]) => marketCap2.appendChild(createOption("capelli_dc", "Colore Capelli", l, q)));
+  cCapelli.appendChild(marketCap2);
+
+  // Colore Occhi
+  let catOcchi = document.createElement("div");
+  catOcchi.className = "category";
+  catOcchi.innerHTML = "<div class='category-header'>👁️ Colore Occhi</div><div class='category-content'></div>";
+  catOcchi.querySelector(".category-header").onclick = () => toggleCategory(catOcchi);
+  container.appendChild(catOcchi);
+  let cOcchi = catOcchi.querySelector(".category-content");
+  let marketOcchi = document.createElement("div");
+  marketOcchi.className = "market";
+  marketOcchi.innerHTML = "<h3>Singoli</h3>";
+  [["Marroni", 1.50], ["Azzurri", 2.40], ["Verdi", 3.20], ["Grigi", 5.00]].forEach(([l, q]) => marketOcchi.appendChild(createOption("occhi_singoli", "Colore Occhi", l, q)));
+  cOcchi.appendChild(marketOcchi);
+
+  let marketOcchi2 = document.createElement("div");
+  marketOcchi2.className = "market";
+  marketOcchi2.innerHTML = "<h3>Doppia Chance</h3>";
+  [["Marroni o Azzurri", 1.25], ["Azzurri o Verdi", 1.80], ["Verdi o Grigi", 2.40]].forEach(([l, q]) => marketOcchi2.appendChild(createOption("occhi_dc", "Colore Occhi", l, q)));
+  cOcchi.appendChild(marketOcchi2);
+
+  // Lunghezza
+  let catLunghezza = document.createElement("div");
+  catLunghezza.className = "category";
+  catLunghezza.innerHTML = "<div class='category-header'>📏 Lunghezza</div><div class='category-content'></div>";
+  catLunghezza.querySelector(".category-header").onclick = () => toggleCategory(catLunghezza);
+  container.appendChild(catLunghezza);
+  let cLunghezza = catLunghezza.querySelector(".category-content");
+  [
+    ["Under 49,5 cm", 1.80],
+    ["Over 49,5 cm", 1.40],
+    ["Under 51,5 cm", 1.70],
+    ["Over 51,5 cm", 1.50]
+  ].forEach(([l, q]) => cLunghezza.appendChild(createOption("lunghezza", "Lunghezza", l, q)));
+
+  // Tipo Parto
+  let catParto = document.createElement("div");
+  catParto.className = "category";
+  catParto.innerHTML = "<div class='category-header'>👶 Tipo Parto</div><div class='category-content'></div>";
+  catParto.querySelector(".category-header").onclick = () => toggleCategory(catParto);
+  container.appendChild(catParto);
+  let cParto = catParto.querySelector(".category-content");
+  [["Naturale", 1.50], ["Cesareo", 1.80], ["Indotto", 4.00]].forEach(([l, q]) => cParto.appendChild(createOption("tipo_parto", "Tipo Parto", l, q)));
+
+  // Durata Parto
+  let catDurata = document.createElement("div");
+  catDurata.className = "category";
+  catDurata.innerHTML = "<div class='category-header'>⏳ Durata Parto</div><div class='category-content'></div>";
+  catDurata.querySelector(".category-header").onclick = () => toggleCategory(catDurata);
+  container.appendChild(catDurata);
+  let cDurata = catDurata.querySelector(".category-content");
+  [
+    ["Under 1,5 ore", 15.00],
+    ["Over 1,5 ore", 15.00],
+    ["Under 3,5 ore", 8.00],
+    ["Over 3,5 ore", 6.00],
+    ["Under 6,5 ore", 4.00],
+    ["Over 6,5 ore", 3.00],
+    ["Under 12,0 ore", 2.00],
+    ["Over 12,0 ore", 1.50],
+    ["Under >18 ore", 3.00],
+    ["Over >18 ore", 3.00]
+  ].forEach(([l, q]) => cDurata.appendChild(createOption("durata_parto", "Durata Parto", l, q)));
+}
+
+// TOGGLE CATEGORY
+function toggleCategory(cat) {
+  cat.classList.toggle("active");
+}
+
+// UPDATE BET LIST
+function updateBetList() {
+  const list = document.getElementById("betList");
+  list.innerHTML = "";
+  Object.entries(selections).forEach(([key, val]) => {
+    let div = document.createElement("div");
+    div.textContent = `${val.marketName}: ${val.label} — quota: ${val.quota.toFixed(2)}`;
+    list.appendChild(div);
+  });
+  updateTotals();
+}
+
+// UPDATE TOTALS
+function updateTotals() {
+  const stake = parseFloat(document.getElementById("stake").value) || 0;
+  let totalOdd = 1;
+  Object.values(selections).forEach(s => totalOdd *= s.quota);
+  if (totalOdd === 1) totalOdd = 0;
+  document.getElementById("totalOdds").textContent = totalOdd.toFixed(2);
+  document.getElementById("potentialWin").textContent = (totalOdd * stake).toFixed(2);
+}
+
+// RESET SELECTIONS
+function resetSelections() {
+  selections = {};
+  document.querySelectorAll(".option.selected, .ou-cell.selected").forEach(el => el.classList.remove("selected"));
+  updateBetList();
+  document.getElementById("stake").value = "10";
+  updateTotals();
+}
+
+// SUBMIT TO FIREBASE
+function submitBet() {
+  const username = document.getElementById("username").value.trim();
+  if (!username) {
+    alert("Inserisci il tuo nome e cognome prima di inviare la schedina.");
+    return;
+  }
+  if (Object.keys(selections).length === 0) {
+    alert("Seleziona almeno una scommessa prima di inviare.");
+    return;
+  }
+  const stake = parseFloat(document.getElementById("stake").value);
+  if (isNaN(stake) || stake <= 0) {
+    alert("Inserisci un importo puntata valido.");
+    return;
+  }
+
+  let totalOdd = 1;
+  Object.values(selections).forEach(s => totalOdd *= s.quota);
+  totalOdd = Number(totalOdd.toFixed(2));
+
+  let mercatiArray = [];
+  Object.values(selections).forEach(s => {
+    mercatiArray.push({
+      nomeMercato: s.marketName,
+      valoreGiocato: s.label
+    });
+  });
+
+  let dataToSend = {
+    nomeUtente: username,
+    importoScommesso: stake.toFixed(2),
+    importoTotaleSchedina: totalOdd.toFixed(2),
+    mercati: mercatiArray
+  };
+
+  const newRef = db.ref("schedine").push();
+  newRef.set(dataToSend)
+    .then(() => {
+      alert("Schedina inviata con successo!");
+      resetSelections();
+      document.getElementById("username").value = "";
+    })
+    .catch(err => {
+      alert("Errore nell'invio della schedina: " + err.message);
+    });
+}
+
+buildMarkets();
+updateTotals();
+
+</script>
+
+</body>
+</html>
